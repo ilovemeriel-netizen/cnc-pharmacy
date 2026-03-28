@@ -507,7 +507,7 @@ function NarcoticMgmt({drugs,onEdit,onAdjust}){
 }
 
 /* ═══ 기초정보 등록 ═══ */
-function DrugRegister({drugs,onDone}){const{t}=useTheme();const[mode,setMode]=useState('single');const fR=useRef();const[f,sF]=useState({drug_code:'',drug_name:'',category:'경구제',ingredient_kr:'',manufacturer:'',price_unit:'',current_qty:'',expiry_date:'',status:'사용',narcotic_type:'일반',insurance_type:'보험'});const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);const[bulk,setBulk]=useState([]);const[bMsg,setBMsg]=useState(null);const[bL,setBL]=useState(false)
+function DrugRegister({onRefresh}){const{t}=useTheme();const[mode,setMode]=useState('single');const fR=useRef();const[f,sF]=useState({drug_code:'',drug_name:'',category:'경구제',ingredient_kr:'',manufacturer:'',price_unit:'',current_qty:'',expiry_date:'',status:'사용',narcotic_type:'일반',insurance_type:'보험'});const[msg,setMsg]=useState(null);const[saving,setSaving]=useState(false);const[bulk,setBulk]=useState([]);const[bMsg,setBMsg]=useState(null);const[bL,setBL]=useState(false)
   // ★ API 검색 상태
   const[apiQ,setApiQ]=useState('');const[apiRes,setApiRes]=useState([]);const[apiLd,setApiLd]=useState(false);const[apiMsg,setApiMsg]=useState(null);const[apiType,setApiType]=useState('permit')
   const apiTypes=[{k:'permit',l:'허가정보',desc:'전문+일반 전체'},{k:'ati',l:'ATI정보',desc:'약품통합정보'},{k:'easy',l:'e약은요',desc:'효능·부작용'},{k:'identify',l:'낱알식별',desc:'모양·색상'},{k:'dur',l:'DUR정보',desc:'병용금기'},{k:'maxDose',l:'최대투여량',desc:'1일한도'}]
