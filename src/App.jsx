@@ -411,7 +411,7 @@ function ExpiryAlert({drugs,onEdit,focusLevel,onReload}){
 
 /* ═══ 재고현황 — ★ 사용량 엑셀 업로드 추가 ═══ */
 function StockStatus({drugs,inv,navFilter:nf,onEdit,onAdjust,onReload}){
-  const[filter,setFilter]=useState(nf?.filter||'전체');const[cats,setCats]=useState(CATS);const[stats,setStats]=useState(['사용']);const[search,setSearch]=useState('');const[page,setPage]=useState(1);const{hs,so,SI,TS}=useSort('drug_name')
+const[filter,setFilter]=useState(nf?.filter||'전체');const[cats,setCats]=useState(CATS);const[stats,setStats]=useState(['사용']);const[search,setSearch]=useState('');const[page,setPage]=useState(1);const{hs,so,SI,TS}=useSort('drug_name')
   const[uMsg,setUMsg]=useState(null);const uRef=useRef()
   useEffect(()=>{if(nf?.filter){setFilter(nf.filter);setPage(1)}},[nf])
   const im={};inv.forEach(i=>{im[i.drug_code]=i});const merged=drugs.filter(d=>stats.includes(d.status)).map(d=>{const iv=im[d.drug_code]||{};const q=d.current_qty||0,sf=iv.safety_stock||d.safety_stock||0,mx=iv.max_stock||d.max_stock||0;let st='정상';if(q===0)st='재고없음';else if(sf>0&&q<sf)st='부족';else if(mx>0&&q>mx)st='과잉';return{...d,safety_stock:sf,max_stock:mx,monthly_avg:iv.monthly_avg||d.monthly_avg||0,stockStatus:st}})
