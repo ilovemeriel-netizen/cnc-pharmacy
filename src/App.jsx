@@ -181,6 +181,7 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
   const { t } = useTheme(); const oc = dr.drug_code || ''
   const [f, sF] = useState({ drug_code: oc, drug_name: dr.drug_name || '', category: dr.category || '', ingredient_en: dr.ingredient_en || '', ingredient_kr: dr.ingredient_kr || '', efficacy_class: dr.efficacy_class || '', efficacy: dr.efficacy || '', manufacturer: dr.manufacturer || '', specification: dr.specification || '', unit: dr.unit || '', price_unit: dr.price_unit || 0, insurance_price: dr.insurance_price || 0, insurance_code: dr.insurance_code || '', current_qty: dr.current_qty || 0, expiry_date: dr.expiry_date || '', status: dr.status || '사용', narcotic_type: getNT(dr), safety_stock: dr.safety_stock || 0, max_stock: dr.max_stock || 0, lot_no: dr.lot_no || '', insurance_type: dr.insurance_type || '급여', storage_method: dr.storage_method || '실온', storage_location: dr.storage_location || '', notes: dr.notes || '' })
   const [saving, setSaving] = useState(false); const [msg, setMsg] = useState(null); const [tab, setTab] = useState('basic'); const [apiLd, setApiLd] = useState(false)
+  const [apiResults, setApiResults] = useState([])
   const [pos, setPos] = useState({ x: 0, y: 0 }); const [dragging, setDragging] = useState(false); const dragRef = useRef(null)
   function set(k, v) { sF(p => ({ ...p, [k]: v })) }
 
@@ -195,20 +196,31 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
   }, [dragging])
 
   /* API 5종 조회 — 1차:e약은요 → 2차:허가정보+낱알식별 → 보조:약가+성분약효 */
-  async function lookupApi() {
-    if (!f.drug_name.trim()) { setMsg('약품명이 필요합니다'); return }
-    setApiLd(true); setMsg(null)
+  async function lookupApi(overrideName) {
+    const searchName = overrideName || f.drug_name.trim()
+    if (!searchName) { setMsg('약품명이 필요합니다'); return }
+    setApiLd(true); setMsg(null); setApiResults([])
     const apiKey = import.meta.env.VITE_DATA_API_KEY
     if (!apiKey) { setMsg('.env에 API키 필요'); setApiLd(false); return }
     const px = new DOMParser()
-    const nm = f.drug_name.trim()
+    const nm = searchName
     const isEng = s => s && /^[a-zA-Z\s()\[\]\-,.:;0-9]+$/.test(s)
-    /* 약품명 정제: "가바로닌캡슐100mg" → ["가바로닌캡슐100mg","가바로닌캡슐","가바로닌"] */
+    /* 약품명 정제 */
     const cleaned = nm.replace(/[\d]+[\s]*(mg|ml|g|mcg|밀리그램|밀리리터|그램|정|캡슐|주|병|앰플|밀리)/gi, '').trim()
     const short = nm.replace(/(정|캡슐|주사|시럽|현탁|산|과립|주|액|크림|연고|겔|패치|좌제).*$/,'').trim()
     const ingr = f.ingredient_kr||''
     const names = [...new Set([nm, cleaned, short, ingr].filter(s => s.length > 1))]
     console.log('API 검색 이름 후보:', names)
+    /* ── 리스트 수집: e약은요에서 유사 약품 목록 표시 ── */
+    try {
+      const listRes = await searchDrugAPI(nm, 'easy')
+      if (listRes.ok && listRes.data?.length) {
+        setApiResults(listRes.data.slice(0, 8))
+      } else {
+        const listRes2 = await searchDrugAPI(nm, 'permit')
+        if (listRes2.ok && listRes2.data?.length) setApiResults(listRes2.data.slice(0, 8))
+      }
+    } catch {}
     let found = { easy: false, permit: false, identify: false, price: false, efficacy: false }
     try {
       /* ── 1차 소스: e약은요 → 효능, 보관방법 ── */
@@ -302,6 +314,13 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
     setApiLd(false)
   }
 
+  /* 리스트에서 다른 약품 선택 → 약품명 교체 후 재조회 */
+  function selectApiResult(item) {
+    if (item.name) sF(p => ({ ...p, drug_name: item.name, manufacturer: item.manufacturer || p.manufacturer, efficacy: item.efficacy || p.efficacy, storage_method: item.storage ? stdStorage(item.storage) : p.storage_method }))
+    setApiResults([])
+    lookupApi(item.name)
+  }
+
   async function save() {
     if (!f.drug_name.trim()) { setMsg('약품명 필수'); return }
     setSaving(true); setMsg(null)
@@ -331,6 +350,10 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
       </div>
       <div style={{ padding: '16px 24px 20px' }}>
         {msg && <div style={{ background: msg === 'OK' ? t.greenL : t.redL, borderRadius: 8, padding: '10px', marginBottom: 12, color: msg === 'OK' ? t.green : t.red, fontSize: 13, fontWeight: 600 }}>{msg === 'OK' ? '✅ API 조회 완료!' : msg}</div>}
+        {apiResults.length>0&&<div style={{background:t.bg,borderRadius:10,border:`1px solid ${t.green}40`,marginBottom:12,overflow:'hidden'}}>
+          <div style={{padding:'8px 14px',borderBottom:`1px solid ${t.border}`,fontSize:11,color:t.green,fontWeight:600}}>{apiResults.length}개 결과 · 다른 약품을 선택하려면 클릭하세요</div>
+          <div style={{maxHeight:140,overflowY:'auto'}}>{apiResults.map((item,i)=><div key={i} onClick={()=>selectApiResult(item)} style={{padding:'8px 14px',borderBottom:`1px solid ${t.border}`,cursor:'pointer',fontSize:12}} onMouseEnter={e=>e.currentTarget.style.background=t.greenL} onMouseLeave={e=>e.currentTarget.style.background=''}><div style={{fontWeight:600,color:t.text}}>{item.name||'-'}</div><div style={{fontSize:10,color:t.textL,marginTop:1}}>{item.manufacturer||''}{item.ingredient?` · ${item.ingredient}`:''}</div></div>)}</div>
+        </div>}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}><div><label style={lb}>약품코드</label><input value={f.drug_code} onChange={e => set('drug_code', e.target.value)} style={{ ...ip, borderColor: cc ? t.amber : t.border }} />{cc && <div style={{ fontSize: 10, color: t.amber, marginTop: 2 }}>⚠ {oc} → {f.drug_code.trim()}</div>}</div><div><label style={lb}>약품명 *</label><input value={f.drug_name} onChange={e => set('drug_name', e.target.value)} onKeyDown={e=>e.key==='Enter'&&lookupApi()} style={ip} /></div></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}><div><label style={lb}>구분</label><select value={f.category} onChange={e => set('category', e.target.value)} style={ip}>{CATS.map(c => <option key={c}>{c}</option>)}</select></div><div><label style={lb}>상태</label><select value={f.status} onChange={e => set('status', e.target.value)} style={ip}>{STATS.map(s => <option key={s}>{s}</option>)}</select></div><div><label style={lb}>급여구분</label><div style={{ display: 'flex', gap: 4 }}>{['급여', '비급여'].map(x => <button key={x} onClick={() => set('insurance_type', x)} style={{ flex: 1, padding: '8px', borderRadius: 6, border: `1px solid ${f.insurance_type === x ? t.blue : t.border}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: f.insurance_type === x ? t.blueL : 'transparent', color: f.insurance_type === x ? t.blue : t.textL }}>{x}</button>)}</div></div></div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}><div><label style={lb}>성분명(영어)</label><input value={f.ingredient_en} onChange={e => set('ingredient_en', e.target.value)} style={ip} /></div><div><label style={lb}>성분명(한글)</label><input value={f.ingredient_kr} onChange={e => set('ingredient_kr', e.target.value)} style={ip} /></div></div>
