@@ -63,6 +63,9 @@ function exS(d, t) { if (!d) return {}; const x = Math.floor((new Date(d) - new 
 function exD(d) { if (!d) return null; return Math.floor((new Date(d) - new Date()) / 864e5) }
 function getNT(d) { if (d.narcotic_type === '향정' || d.narcotic_type === '마약') return d.narcotic_type; if (d.is_narcotic === true || d.is_narcotic === 'true') return '향정'; return '일반' }
 function isN(d) { return getNT(d) !== '일반' }
+/* 보험구분 정규화: 입력폼은 '급여'/'비급여', 일부 데이터는 '보험'/'비보험', 또는 NULL.
+   모두 일관되게 '비보험' 그룹 여부로 판정. */
+function isNonIns(d) { const v = (d?.insurance_type || '').toString(); return v === '비보험' || v === '비급여' }
 function NT({ d }) { const { t } = useTheme(); const n = getNT(d); if (n === '일반') return null; const c = n === '마약' ? t.red : t.purple; return <span style={{ marginLeft: 4, background: n === '마약' ? t.redL : t.purpleL, color: c, fontSize: 9, padding: '2px 6px', borderRadius: 6, fontWeight: 600 }}>{n}</span> }
 async function fetchAll() { let a = [], f = 0; while (true) { const { data, error } = await supabase.from('drugs').select('*').order('drug_name').range(f, f + 999); if (error || !data || !data.length) break; a = [...a, ...data]; if (data.length < 1000) break; f += 1000 }; return a }
 async function searchDrugAPI(keyword, apiType = 'easy') {
@@ -90,7 +93,11 @@ async function searchDrugAPI(keyword, apiType = 'easy') {
   const ep = endpoints[apiType] || endpoints.easy
   try {
     const url = `/api/datago/${ep.path}?${ep.param}=${encodeURIComponent(keyword)}&type=json&numOfRows=15`
-    const res = await fetch(url); const text = await res.text()
+    /* 12초 timeout 보호 — Netlify Function 콜드 스타트 + 공공API 응답 지연 대비 */
+    const ctrl = new AbortController()
+    const tid = setTimeout(() => ctrl.abort(), 12000)
+    const res = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(tid))
+    const text = await res.text()
     try {
       const json = JSON.parse(text)
       if (json?.response?.header?.resultCode && json.response.header.resultCode !== '00') {
@@ -194,6 +201,9 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
     const searchName = overrideName || f.drug_name.trim()
     if (!searchName) { setMsg('약품명이 필요합니다'); return }
     setApiLd(true); setMsg(null); setApiResults([]); setLookupInfo(null)
+    /* try/finally — 어떤 예외/타임아웃이 발생해도 setApiLd(false) 반드시 호출되어
+       "조회중..." 영구 상태 방지 */
+    try {
     const px = new DOMParser()
     const nm = searchName
     const isEng = s => s && /^[a-zA-Z\s()\[\]\-,.:;0-9]+$/.test(s)
@@ -343,7 +353,10 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
       else if (kr && chk(kr) && !en) { en=kr; kr='' }
       return {...p, ingredient_en:en, ingredient_kr:kr}
     })
-    setApiLd(false)
+    } finally {
+      /* 어떤 경우에도 로딩 상태 해제 — "조회중..." 영구 상태 방지 */
+      setApiLd(false)
+    }
   }
 
   /* 리스트에서 다른 약품 선택 → 약품명 교체 후 재조회 */
@@ -642,7 +655,7 @@ function Dashboard({ drugs, inv, txns, onNav, onEdit }) {
   const { t } = useTheme(); const { hs, so, SI, TS } = useSort('drug_name')
   const today = new Date(), fmt = d => d.toISOString().split('T')[0], ym = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`, d30 = new Date(today), d90 = new Date(today); d30.setDate(d30.getDate() + 30); d90.setDate(d90.getDate() + 90)
   const active = drugs.filter(d => d.status === '사용')
-  const s = { total: drugs.length, active: active.length, stopped: drugs.filter(d => d.status === '중지').length, dormant: drugs.filter(d => d.status === '휴면').length, narc: drugs.filter(d => isN(d)).length, nonIns: drugs.filter(d => d.insurance_type === '비보험' && d.status === '사용').length, shortage: inv.filter(d => d.stock_status === '부족').length, e30: drugs.filter(d => d.expiry_date && d.expiry_date <= fmt(d30) && d.status === '사용').length, e90: drugs.filter(d => d.expiry_date && d.expiry_date > fmt(d30) && d.expiry_date <= fmt(d90) && d.status === '사용').length }
+  const s = { total: drugs.length, active: active.length, stopped: drugs.filter(d => d.status === '중지').length, dormant: drugs.filter(d => d.status === '휴면').length, narc: drugs.filter(d => isN(d)).length, nonIns: drugs.filter(d => isNonIns(d) && d.status === '사용').length, shortage: inv.filter(d => d.stock_status === '부족').length, e30: drugs.filter(d => d.expiry_date && d.expiry_date <= fmt(d30) && d.status === '사용').length, e90: drugs.filter(d => d.expiry_date && d.expiry_date > fmt(d30) && d.expiry_date <= fmt(d90) && d.status === '사용').length }
   const totalAmt = active.reduce((a, d) => a + (d.current_qty || 0) * (d.price_unit || 0), 0)
   const mTx = txns.filter(tx => tx.transaction_date?.startsWith(ym))
   const txS = { inC: mTx.filter(x => x.type === '입고').length, inA: mTx.filter(x => x.type === '입고').reduce((a, x) => a + (x.total_amount || 0), 0), outC: mTx.filter(x => x.type === '출고').length, outA: mTx.filter(x => x.type === '출고').reduce((a, x) => a + (x.total_amount || 0), 0), retC: mTx.filter(x => x.type === '반품').length, retA: mTx.filter(x => x.type === '반품').reduce((a, x) => a + (x.total_amount || 0), 0), dspC: mTx.filter(x => x.type === '폐기').length, dspA: mTx.filter(x => x.type === '폐기').reduce((a, x) => a + (x.total_amount || 0), 0), dspQ: mTx.filter(x => x.type === '폐기').reduce((a, x) => a + (x.quantity || 0), 0) }
@@ -721,7 +734,7 @@ function DrugList({ drugs, navFilter: nf, onEdit }) {
   const { t } = useTheme(); const [search, setSearch] = useState(''); const [cats, setCats] = useState(CATS); const [stats, setStats] = useState(nf?.status || ['사용']); const [narcOnly, setNarcOnly] = useState(false); const [insF, setInsF] = useState(nf?.insType || '전체'); const [page, setPage] = useState(1); const [visCols, setVisCols] = useState(DRUG_COLS.filter(c => c.default).map(c => c.key))
   const { hs, so, SI, TS } = useSort('drug_name')
   useEffect(() => { if (nf?.status) setStats(Array.isArray(nf.status) ? nf.status : [nf.status]); if (nf?.narcotic) setNarcOnly(true); else setNarcOnly(false); if (nf?.insType) setInsF(nf.insType); else setInsF('전체'); setPage(1) }, [nf])
-  const filtered = so(drugs.filter(d => { if (narcOnly && !isN(d)) return false; if (!stats.includes(d.status)) return false; if (!cats.includes(d.category)) return false; if (insF !== '전체' && (d.insurance_type || '보험') !== insF) return false; if (search.trim()) { const q = search.trim().toLowerCase(); return d.drug_name?.toLowerCase().includes(q) || d.drug_code?.toLowerCase().includes(q) || d.ingredient_kr?.toLowerCase().includes(q) || d.manufacturer?.toLowerCase().includes(q) }; return true }))
+  const filtered = so(drugs.filter(d => { if (narcOnly && !isN(d)) return false; if (!stats.includes(d.status)) return false; if (!cats.includes(d.category)) return false; if (insF !== '전체') { const normalized = isNonIns(d) ? '비보험' : '보험'; if (normalized !== insF) return false } if (search.trim()) { const q = search.trim().toLowerCase(); return d.drug_name?.toLowerCase().includes(q) || d.drug_code?.toLowerCase().includes(q) || d.ingredient_kr?.toLowerCase().includes(q) || d.manufacturer?.toLowerCase().includes(q) }; return true }))
   const tp = Math.ceil(filtered.length / PP), paged = filtered.slice((page - 1) * PP, page * PP); const activeCols = DRUG_COLS.filter(c => visCols.includes(c.key))
   function dl() { const ws = XLSX.utils.json_to_sheet(filtered.map(d => { const o = {}; DRUG_COLS.forEach(c => { o[c.label] = d[c.key] || '' }); return o })); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '약품'); XLSX.writeFile(wb, `약품목록_${new Date().toISOString().split('T')[0]}.xlsx`) }
   function cellVal(d, col) {
@@ -731,7 +744,7 @@ function DrugList({ drugs, navFilter: nf, onEdit }) {
     if (col.key === 'ingredient_en') return <span title={d.ingredient_en || ''} style={{ color: t.textL, fontSize: 10, maxWidth: 140, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle', fontStyle: 'italic' }}>{d.ingredient_en || '-'}</span>
     if (col.key === 'current_qty') return <span style={{ fontWeight: 600, color: d.current_qty === 0 ? t.red : t.text }}>{d.current_qty?.toLocaleString()}</span>
     if (col.key === 'price_unit') return d.price_unit ? d.price_unit.toLocaleString() + '원' : '-'
-    if (col.key === 'insurance_type') return (d.insurance_type || '보험') === '비보험' ? <Bd bg={t.blueL} color={t.blue}>비보험</Bd> : <span style={{ fontSize: 10, color: t.textL }}>보험</span>
+    if (col.key === 'insurance_type') return isNonIns(d) ? <Bd bg={t.blueL} color={t.blue}>비보험</Bd> : <span style={{ fontSize: 10, color: t.textL }}>보험</span>
     if (col.key === 'expiry_date') return <span style={exS(d.expiry_date, t)}>{d.expiry_date || '-'}</span>
     if (col.key === 'status') return <SB s={d.status} />
     return <span title={d[col.key] || ''} style={{ color: t.textM, fontSize: 11, maxWidth: 120, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{d[col.key] || '-'}</span>
@@ -1968,11 +1981,13 @@ function DeleteAccountModal({ isEmailUser, onClose, onDeleted }) {
 
 /* ═══ 관리자 — 가입자 조회 ═══ */
 function AdminUsers() {
-  const { t } = useTheme()
+  const { t, user } = useTheme()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [errMsg, setErrMsg] = useState(null)
+  const [editRow, setEditRow] = useState(null) /* 수정 모달용 — null이면 닫힘 */
+  const [toast, setToast] = useState(null)
   const { hs, so, SI, TS } = useSort('created_at', 'desc')
 
   async function load() {
@@ -2013,6 +2028,7 @@ function AdminUsers() {
               <th onClick={() => hs('position')} style={TS('position')}>직책<SI col="position" /></th>
               <th onClick={() => hs('role')} style={TS('role')}>권한<SI col="role" /></th>
               <th onClick={() => hs('created_at')} style={TS('created_at')}>가입일<SI col="created_at" /></th>
+              <th style={{ ...TS('actions'), cursor: 'default', textAlign: 'center', width: 80 }}>수정</th>
             </tr></thead>
             <tbody>{sorted.map(r => <tr key={r.id} style={{ borderTop: `1px solid ${t.border}` }}>
               <td style={{ padding: '10px 12px', color: t.text, fontWeight: 500 }}>{r.email || '-'}</td>
@@ -2026,11 +2042,90 @@ function AdminUsers() {
                   : <span style={{ background: t.greenL, color: t.green, padding: '3px 10px', borderRadius: 8, fontSize: 10, fontWeight: 600 }}>일반</span>}
               </td>
               <td style={{ padding: '10px 12px', color: t.textM, fontSize: 11 }}>{fmtDate(r.created_at)}</td>
+              <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                <button
+                  onClick={() => setEditRow(r)}
+                  style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textM, cursor: 'pointer', fontSize: 11, fontWeight: 600, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = t.accent; e.currentTarget.style.color = t.accent }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.textM }}
+                >수정</button>
+              </td>
             </tr>)}</tbody>
           </table>
         </div>}
     </div>
+    <Toast msg={toast?.msg} kind={toast?.kind} onClose={() => setToast(null)} />
+    {editRow && <AdminUserEditModal
+      row={editRow}
+      currentUserId={user?.id}
+      onClose={() => setEditRow(null)}
+      onSaved={() => { setEditRow(null); setToast({ msg: '권한이 변경되었습니다', kind: 'ok' }); load() }}
+    />}
     <Ft />
+  </div>
+}
+
+/* ═══ 관리자 — 사용자 권한 수정 모달 (role 변경 전용) ═══ */
+function AdminUserEditModal({ row, currentUserId, onClose, onSaved }) {
+  const { t } = useTheme()
+  const [role, setRole] = useState(row.role || 'user')
+  const [saving, setSaving] = useState(false)
+  const [errMsg, setErrMsg] = useState(null)
+
+  const isSelf = currentUserId && row.id === currentUserId
+  const isOriginallyAdmin = row.role === 'admin'
+  const wantsToRemoveOwnAdmin = isSelf && isOriginallyAdmin && role !== 'admin'  /* 본인 admin 해제 시도 */
+  const isUnchanged = role === (row.role || 'user')
+  const canSubmit = !isUnchanged && !wantsToRemoveOwnAdmin && !saving
+
+  async function handleSave() {
+    if (!canSubmit) return
+    setSaving(true); setErrMsg(null)
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', row.id)
+    setSaving(false)
+    if (error) { setErrMsg(error.message.includes('row-level') ? 'DB 권한 정책이 아직 적용되지 않았습니다. SQL 마이그레이션(0005)을 먼저 실행해 주세요.' : error.message); return }
+    onSaved?.()
+  }
+
+  const lb = { fontSize: 11, color: t.textM, display: 'block', marginBottom: 6, fontWeight: 600 }
+  const roleBtn = (val, color, colorL, label) => {
+    const active = role === val
+    const disabled = isSelf && val === 'user' && isOriginallyAdmin  /* 본인 admin 해제 비활성 */
+    return <button
+      onClick={() => !disabled && setRole(val)}
+      disabled={disabled}
+      style={{ flex: 1, padding: '10px', borderRadius: 8, border: `1.5px solid ${active ? color : t.border}`, background: active ? colorL : 'transparent', color: active ? color : (disabled ? t.textL : t.textM), fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', transition: 'all .15s', opacity: disabled ? 0.5 : 1 }}
+    >{label}</button>
+  }
+
+  return <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: t.cardSolid, borderRadius: 16, padding: '22px 26px', maxWidth: 420, width: '100%', border: `1px solid ${t.border}`, boxShadow: t.shadowH }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>사용자 권한 수정</div>
+      <div style={{ fontSize: 11, color: t.textL, marginBottom: 18 }}>
+        {row.email}{row.full_name ? ` · ${row.full_name}` : ''}
+        {isSelf && <span style={{ marginLeft: 6, background: t.accentL, color: t.accent, padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 700 }}>본인</span>}
+      </div>
+
+      {errMsg && <div style={{ background: t.redL, color: t.red, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, fontWeight: 500 }}>{errMsg}</div>}
+
+      <label style={lb}>권한</label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        {roleBtn('admin', t.purple, t.purpleL, '관리자')}
+        {roleBtn('user',  t.green,  t.greenL,  '일반')}
+      </div>
+
+      {wantsToRemoveOwnAdmin && <div style={{ background: t.amberL, border: `1px solid ${t.amber}40`, borderRadius: 8, padding: '10px 12px', fontSize: 11.5, color: t.text, lineHeight: 1.55, marginBottom: 8, marginTop: 6 }}>
+        ⚠️ 본인의 관리자 권한은 직접 해제할 수 없습니다. 다른 관리자가 변경해야 합니다.
+      </div>}
+      {isSelf && isOriginallyAdmin && !wantsToRemoveOwnAdmin && <div style={{ fontSize: 11, color: t.textL, marginTop: 6, marginBottom: 8 }}>
+        본인 계정은 잠금 방지를 위해 '일반'으로 변경할 수 없습니다.
+      </div>}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
+        <button onClick={onClose} disabled={saving} style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textM, fontSize: 12, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>취소</button>
+        <button onClick={handleSave} disabled={!canSubmit} style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: canSubmit ? t.accent : t.textL, color: '#fff', fontSize: 12, fontWeight: 700, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'background .15s' }}>{saving ? '저장 중...' : '저장'}</button>
+      </div>
+    </div>
   </div>
 }
 
@@ -2231,9 +2326,6 @@ export default function App() {
         .brand-logo { flex-shrink: 0; }
         .brand-title { font-weight: 700; white-space: nowrap; color: #804A87; }
         .brand-sub   { font-size: 12px; color: #5b6776; }
-        @media (max-width: 640px) {
-          .brand-sub { display: none; }
-        }
         @media print {
           @page { size: landscape; margin: 8mm; }
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -2241,19 +2333,34 @@ export default function App() {
           table { font-size: 9px !important; }
           th, td { padding: 4px 6px !important; }
         }
-        /* ═══ 반응형: 태블릿 (≤1024px) ═══ */
+        /* ═══ 반응형: 태블릿 (≤1024px) — PC 메뉴 유지, gap만 축소 ═══ */
         @media (max-width: 1024px) {
           .cnc-nav-desktop { gap: 1px !important; }
           .cnc-nav-desktop button { padding: 6px 8px !important; font-size: 11px !important; }
-          .cnc-date { display: none !important; }
         }
-        /* ═══ 반응형: 모바일 (≤768px) ═══ */
+        /* ═══ 반응형: 모바일 (≤768px) — PC와 동일 UI, 메뉴는 가로 스크롤 ═══ */
         @media (max-width: 768px) {
-          .cnc-nav-desktop { display: none !important; }
-          .cnc-hamburger { display: flex !important; }
-          .cnc-header { padding: 0 12px !important; }
-          .cnc-title { font-size: 13px !important; }
-          .cnc-plus { width: 28px !important; height: 28px !important; font-size: 16px !important; }
+          /* 메뉴는 숨기지 않고 가로 스크롤로 모두 노출 */
+          .cnc-nav-desktop {
+            justify-content: flex-start !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;          /* Firefox */
+            flex-wrap: nowrap !important;
+          }
+          .cnc-nav-desktop::-webkit-scrollbar { display: none; }  /* WebKit */
+          .cnc-nav-desktop button {
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            padding: 6px 10px !important;
+            font-size: 11px !important;
+          }
+          /* 햄버거 메뉴는 숨김(가로 스크롤 사용) — PC와 동일 UX 유지 */
+          .cnc-hamburger { display: none !important; }
+          .cnc-header { padding: 0 10px !important; gap: 6px !important; }
+          .cnc-title { font-size: 14px !important; }
+          .cnc-plus { width: 30px !important; height: 30px !important; font-size: 17px !important; }
+          /* 콘텐츠 영역 — 그리드/패딩 모바일 적응 */
           div[style*="padding: 20px 24px"], div[style*="padding:'20px 24px'"] { padding: 10px 12px !important; }
           div[style*="gridTemplateColumns: 'repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
           div[style*="gridTemplateColumns: 'repeat(5"] { grid-template-columns: repeat(2, 1fr) !important; }
@@ -2261,7 +2368,8 @@ export default function App() {
           div[style*="gridTemplateColumns: '340px 1fr'"] { grid-template-columns: 1fr !important; }
           table { font-size: 10px !important; }
           th, td { padding: 4px 6px !important; }
-          .cnc-date { display: none !important; }
+          /* 모달 — 모바일에서 안전한 패딩·풀폭 활용 */
+          .no-print[style*="position: 'fixed', inset: 0"] { padding: 12px !important; }
         }
       `}</style>
       <div style={{ minHeight: '100vh', background: t.bg }}>
