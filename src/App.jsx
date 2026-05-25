@@ -169,7 +169,9 @@ function ColToggle({ cols, visible, setVisible }) {
 
 /* ═══ 약품 수정 모달 (드래그 가능) ═══ */
 function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
-  const { t } = useTheme(); const oc = dr.drug_code || ''
+  const { t, profile, memberRole } = useTheme(); const oc = dr.drug_code || ''
+  const canDelete = profile?.role === 'admin' || memberRole === 'owner' || memberRole === 'admin'
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [f, sF] = useState({ drug_code: oc, drug_name: dr.drug_name || '', category: dr.category || '', ingredient_en: dr.ingredient_en || '', ingredient_kr: dr.ingredient_kr || '', efficacy_class: dr.efficacy_class || '', efficacy: dr.efficacy || '', manufacturer: dr.manufacturer || '', specification: dr.specification || '', unit: dr.unit || '', price_unit: dr.price_unit || 0, insurance_price: dr.insurance_price || 0, insurance_code: dr.insurance_code || '', current_qty: dr.current_qty || 0, expiry_date: dr.expiry_date || '', status: dr.status || '사용', narcotic_type: getNT(dr), safety_stock: dr.safety_stock || 0, max_stock: dr.max_stock || 0, lot_no: dr.lot_no || '', insurance_type: dr.insurance_type || '급여', storage_method: dr.storage_method || '실온', storage_location: dr.storage_location || '', notes: dr.notes || '' })
   const [saving, setSaving] = useState(false); const [msg, setMsg] = useState(null); const [tab, setTab] = useState('basic'); const [apiLd, setApiLd] = useState(false)
   const [apiResults, setApiResults] = useState([])
@@ -426,7 +428,107 @@ function DrugEditModal({ drug: dr, onClose, onSaved, onLotManage }) {
           <div style={{ marginBottom: 10 }}><label style={lb}>비고</label><textarea value={f.notes} onChange={e => set('notes', e.target.value)} rows={2} style={{ ...ip, resize: 'vertical' }} /></div>
           <div><label style={lb}>향정·마약</label><div style={{ display: 'flex', gap: 4 }}>{['일반', '향정', '마약'].map(x => { const a = f.narcotic_type === x, cl = x === '일반' ? t.green : x === '향정' ? t.purple : t.red; return <button key={x} onClick={() => set('narcotic_type', x)} style={{ flex: 1, padding: '8px', borderRadius: 6, border: `1px solid ${a ? cl : t.border}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, background: a ? cl + '18' : 'transparent', color: a ? cl : t.textL }}>{x}</button> })}</div></div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}><button onClick={onClose} style={{ flex: 1, padding: 11, borderRadius: 8, border: `1px solid ${t.border}`, cursor: 'pointer', background: 'transparent', color: t.textM, fontSize: 13, fontWeight: 600 }}>취소</button><button onClick={save} disabled={saving} style={{ flex: 2, padding: 11, borderRadius: 8, border: 'none', cursor: saving ? 'not-allowed' : 'pointer', background: saving ? t.textL : t.accent, color: '#fff', fontSize: 13, fontWeight: 700 }}>{saving ? '저장 중...' : '저장'}</button></div>
+        {/* 관리자(profiles.role=admin) 또는 테넌트 owner/admin 전용 — 절제된 텍스트 버튼 */}
+        {canDelete && <div style={{ marginTop: 14, paddingTop: 10, borderTop: `1px dashed ${t.border}`, textAlign: 'right' }}>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            onMouseEnter={e => { e.currentTarget.style.color = t.textM }}
+            onMouseLeave={e => { e.currentTarget.style.color = t.textL }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10.5, color: t.textL, padding: '4px 6px', textDecoration: 'underline', fontWeight: 500, transition: 'color .15s' }}
+          >약품 영구 삭제</button>
+        </div>}
       </div>
+    </div>
+    {showDeleteModal && <DrugDeleteConfirm drug={dr} onClose={() => setShowDeleteModal(false)} onDeleted={() => { setShowDeleteModal(false); onSaved?.(); onClose() }} />}
+  </div>
+}
+
+/* ═══ 약품 영구 삭제 확인 모달 — 거래/재고 이력 카운트 → 0건일 때만 약품명 입력 후 hard delete ═══ */
+function DrugDeleteConfirm({ drug: dr, onClose, onDeleted }) {
+  const { t } = useTheme()
+  const [phase, setPhase] = useState('checking') /* 'checking' | 'blocked' | 'confirm' | 'deleting' */
+  const [refCount, setRefCount] = useState(0)
+  const [confirmName, setConfirmName] = useState('')
+  const [errMsg, setErrMsg] = useState(null)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const code = dr.drug_code
+        const queries = [
+          supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('drug_code', code),
+          supabase.from('inventory_stock').select('*', { count: 'exact', head: true }).eq('drug_code', code),
+          supabase.from('monthly_snapshots').select('*', { count: 'exact', head: true }).eq('drug_code', code),
+        ]
+        let total = 0
+        for (const q of queries) {
+          const { count, error } = await q
+          if (error) continue /* 단일 테이블 오류는 무시하고 안전쪽으로 합산 */
+          total += count || 0
+        }
+        setRefCount(total)
+        setPhase(total > 0 ? 'blocked' : 'confirm')
+      } catch (e) {
+        setErrMsg('이력 확인 중 오류: ' + e.message)
+        setPhase('confirm') /* 확인 단계로라도 진입해 사용자가 결정할 수 있게 */
+      }
+    })()
+  }, [dr])
+
+  async function handleDelete() {
+    if (confirmName !== dr.drug_name) return
+    setPhase('deleting'); setErrMsg(null)
+    const res = dr.id
+      ? await supabase.from('drugs').delete().eq('id', dr.id)
+      : await supabase.from('drugs').delete().eq('drug_code', dr.drug_code)
+    if (res.error) {
+      setErrMsg(res.error.message)
+      setPhase('confirm')
+      return
+    }
+    onDeleted?.()
+  }
+
+  const canSubmit = confirmName === dr.drug_name && phase === 'confirm'
+
+  return <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: t.cardSolid, borderRadius: 14, padding: '22px 26px', maxWidth: 420, width: '100%', border: `1px solid ${t.border}`, boxShadow: t.shadowH }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>약품 영구 삭제</div>
+      <div style={{ fontSize: 11, color: t.textM, marginBottom: 16, lineHeight: 1.5 }}>
+        <span style={{ fontFamily: 'monospace' }}>{dr.drug_code}</span> · <strong style={{ color: t.text }}>{dr.drug_name}</strong>
+      </div>
+
+      {phase === 'checking' && <div style={{ fontSize: 12, color: t.textM, padding: '14px 0', textAlign: 'center' }}>거래·재고 이력 확인 중...</div>}
+
+      {phase === 'blocked' && <>
+        <div style={{ background: t.amberL, border: `1px solid ${t.amber}40`, borderRadius: 8, padding: '12px 14px', fontSize: 12, color: t.text, lineHeight: 1.6, marginBottom: 14 }}>
+          이 약품에는 거래·재고 이력 <strong style={{ color: t.amber }}>{refCount}건</strong>이 있어 영구 삭제할 수 없습니다.<br />
+          대신 약품 정보 수정에서 <strong>상태를 '중지'</strong>로 변경하면 목록에서 감출 수 있습니다.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textM, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>확인</button>
+        </div>
+      </>}
+
+      {(phase === 'confirm' || phase === 'deleting') && <>
+        {errMsg && <div style={{ background: t.bg, border: `1px solid ${t.border}`, color: t.textM, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 11.5 }}>{errMsg}</div>}
+        <div style={{ fontSize: 12, color: t.textM, marginBottom: 8, lineHeight: 1.55 }}>
+          거래·재고 이력 없음. 영구 삭제하려면 아래 약품명을 정확히 입력해 주세요.
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 10, padding: '9px 12px', background: t.bg, borderRadius: 6, border: `1px solid ${t.border}`, fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>{dr.drug_name}</div>
+        <input
+          value={confirmName}
+          onChange={e => setConfirmName(e.target.value)}
+          placeholder="약품명을 그대로 입력"
+          disabled={phase === 'deleting'}
+          style={{ width: '100%', padding: '9px 12px', border: `1px solid ${t.border}`, borderRadius: 8, fontSize: 13, outline: 'none', boxSizing: 'border-box', background: t.bg, color: t.text, marginBottom: 14 }}
+          autoFocus
+        />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={phase === 'deleting'} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textM, fontSize: 12, fontWeight: 600, cursor: phase === 'deleting' ? 'not-allowed' : 'pointer' }}>취소</button>
+          <button onClick={handleDelete} disabled={!canSubmit} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: canSubmit ? t.textM : t.textL, color: '#fff', fontSize: 12, fontWeight: 700, cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'background .15s' }}>{phase === 'deleting' ? '삭제 중...' : '영구 삭제'}</button>
+        </div>
+      </>}
     </div>
   </div>
 }
@@ -2021,6 +2123,7 @@ export default function App() {
   const [dark, setDark] = useState(false)
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [memberRole, setMemberRole] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [menu, setMenu] = useState('dashboard')
   const [drugs, setDrugs] = useState([])
@@ -2033,7 +2136,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   const t = dark ? themes.dark : themes.light
-  const themeVal = { t, dark, toggle: () => setDark(d => !d), user, profile, logout: async () => { await supabase.auth.signOut(); setUser(null); setProfile(null); setMenu('dashboard') } }
+  const themeVal = { t, dark, toggle: () => setDark(d => !d), user, profile, memberRole, logout: async () => { await supabase.auth.signOut(); setUser(null); setProfile(null); setMemberRole(null); setMenu('dashboard') } }
 
   /* 인증 상태 확인 */
   useEffect(() => {
@@ -2053,6 +2156,21 @@ export default function App() {
     setProfile(data)
   }
   useEffect(() => { loadProfile() }, [user])
+
+  /* 테넌트 멤버십 role 로드 — tenant_members 테이블이 아직 없거나 매핑 미존재 시 silent fail
+     (앱은 정상 동작하되 관리자 전용 UI만 숨겨짐) */
+  async function loadMemberRole() {
+    if (!user) { setMemberRole(null); return }
+    const { data, error } = await supabase
+      .from('tenant_members')
+      .select('role')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+    if (error || !data) { setMemberRole(null); return }
+    setMemberRole(data.role)
+  }
+  useEffect(() => { loadMemberRole() }, [user])
 
   async function load() {
     const d = await fetchAll()
