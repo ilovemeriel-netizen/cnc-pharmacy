@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#804A87" />
+  <title>오프라인 · 약플로</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+      background: linear-gradient(135deg, #2E4A62 0%, #804A87 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 40px 32px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+    .icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #804A87, #5e3563);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 28px;
+      font-weight: 800;
+      box-shadow: 0 8px 20px rgba(94, 53, 99, 0.45);
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 13.5px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .brand {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.45);
+      letter-spacing: 0.5px;
+      margin-top: 18px;
+    }
+    .brand strong { color: #BFA6D9; font-weight: 700; }
+    button {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: none;
+      background: #fff;
+      color: #804A87;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      font-family: inherit;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2); }
+    button:active { transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">Y</div>
+    <h1>현재 오프라인입니다</h1>
+    <p>네트워크 연결을 확인한 후<br>다시 시도해 주세요.</p>
+    <button onclick="location.reload()">다시 시도</button>
+    <div class="brand">약플로 · <strong>Yakflo</strong></div>
+  </div>
+</body>
+</html>

@@ -128,7 +128,7 @@ function useSort(ik = '', id = 'asc') {
 /* ── UI Atoms ── */
 function Bd({ children, bg, color }) { return <span style={{ background: bg, color, padding: '3px 10px', borderRadius: 8, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>{children}</span> }
 function SB({ s }) { const { t } = useTheme(); const m = { '사용': [t.greenL, t.green], '중지': ['#F0F0EB', t.textL], '휴면': [t.amberL, t.amber] }; const [b, c] = m[s] || ['#F0F0EB', t.textL]; return <Bd bg={b} color={c}>{s}</Bd> }
-function Ft() { const { t } = useTheme(); return <div style={{ textAlign: 'center', padding: '20px 0 12px', fontSize: 11, color: t.textL, borderTop: `1px solid ${t.border}`, marginTop: 24 }}>C O P Y R I G H T  ⓒ  2 0 2 6  J E O N G H W A   L E E<br /><br />All rights reserved. 무단 전재 및 재배포 금지.</div> }
+function Ft() { const { t } = useTheme(); return <div style={{ textAlign: 'center', padding: '20px 0 12px', fontSize: 11, color: t.textL, borderTop: `1px solid ${t.border}`, marginTop: 24, lineHeight: 1.6 }}>C O P Y R I G H T  ⓒ  2 0 2 6  J E O N G H W A   L E E<br />All rights reserved. 무단 전재 및 재배포 금지.</div> }
 function Pg({ page: p, setPage: sp, tp, fl, pp }) { const { t } = useTheme(); if (tp <= 1) return null; const btn = dis => ({ padding: '5px 12px', borderRadius: 8, border: `1px solid ${t.border}`, cursor: dis ? 'not-allowed' : 'pointer', background: t.card, color: dis ? t.textL : t.text, fontWeight: 600, fontSize: 11, opacity: dis ? .4 : 1 }); return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: `1px solid ${t.border}` }}><span style={{ fontSize: 11, color: t.textM }}>{fl.length}개 중 {Math.min((p - 1) * pp + 1, fl.length)}–{Math.min(p * pp, fl.length)}</span><div style={{ display: 'flex', gap: 3 }}><button onClick={() => sp(x => x - 1)} disabled={p === 1} style={btn(p === 1)}>◀</button>{Array.from({ length: Math.min(5, tp) }, (_, i) => { const pg = Math.max(1, Math.min(p - 2, tp - 4)) + i; return <button key={pg} onClick={() => sp(pg)} style={{ ...btn(false), background: p === pg ? t.accent : t.card, color: p === pg ? '#fff' : t.text, border: `1px solid ${p === pg ? t.accent : t.border}` }}>{pg}</button> })}<button onClick={() => sp(x => x + 1)} disabled={p === tp} style={btn(p === tp)}>▶</button></div></div> }
 function CN({ drug: d, onEdit }) { const { t } = useTheme(); return <td style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'left', color: t.accent, cursor: 'pointer' }} onClick={() => onEdit(d)} onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline'; e.currentTarget.style.color = t.purple }} onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; e.currentTarget.style.color = t.accent }}>{d.drug_name}</td> }
 
@@ -505,9 +505,12 @@ function Header({ menu: m, setMenu: sm }) {
   const isAdmin = profile?.role === 'admin'
   return <>
     <div className="no-print cnc-header" style={{ background: t.nav, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56, position: 'sticky', top: 0, zIndex: 900 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: '0 0 auto' }} onClick={() => nav('dashboard')}>
-        <div onClick={e => { e.stopPropagation(); nav('register') }} className="cnc-plus" style={{ width: 32, height: 32, borderRadius: 8, background: m === 'register' ? t.navHi + '30' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, cursor: 'pointer', color: t.navHi, border: '1px solid rgba(255,255,255,0.1)' }}>+</div>
-        <div><div className="cnc-title" style={{ fontSize: 15, fontWeight: 700, color: t.navText, letterSpacing: 0.5 }}>씨엔씨재활의학과</div><div style={{ fontSize: 9, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>약품통합관리시스템</div></div>
+      <div className="brand-area" style={{ cursor: 'pointer', flex: '0 0 auto' }} onClick={() => nav('dashboard')}>
+        <div onClick={e => { e.stopPropagation(); nav('register') }} className="cnc-plus" style={{ width: 34, height: 34, borderRadius: 9, background: m === 'register' ? 'rgba(128, 74, 135, 0.85)' : 'rgba(128, 74, 135, 0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, cursor: 'pointer', color: '#BFA6D9', border: '1px solid rgba(128, 74, 135, 0.7)', flexShrink: 0, transition: 'background 0.15s', boxShadow: '0 2px 6px rgba(0,0,0,0.18)' }} title="신규 약품 등록">+</div>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div className="brand-title cnc-title" style={{ fontSize: 17, color: '#ffffff', letterSpacing: 0.3, lineHeight: 1.15, fontWeight: 700 }}>약플로 · <span style={{ color: '#BFA6D9' }}>Yakflo</span></div>
+          <div className="brand-sub" style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: 0.2, lineHeight: 1.2 }}>약품 통합 관리 솔루션</div>
+        </div>
       </div>
       <div className="cnc-nav-desktop" style={{ display: 'flex', gap: 2, flex: '1 1 auto', justifyContent: 'center' }}>{ms.map(x => <button key={x.id} onClick={() => nav(x.id)} style={{ padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: m === x.id ? 700 : 400, background: m === x.id ? t.navHi + '22' : 'transparent', color: m === x.id ? t.navHi : 'rgba(255,255,255,0.55)', border: m === x.id ? `1px solid ${t.navHi}40` : '1px solid transparent', transition: 'all .15s' }}>{x.l}</button>)}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
@@ -1978,8 +1981,8 @@ function LoginPage({ onLogin }) {
     <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 400, padding: '40px 36px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ width: 56, height: 56, borderRadius: 14, background: `linear-gradient(135deg, #804A87, #019748)`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 24, fontWeight: 700, color: '#fff' }}>+</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: t.nav }}>씨엔씨재활의학과</div>
-        <div style={{ fontSize: 12, color: t.textL, marginTop: 4 }}>약품통합관리시스템</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: t.nav }}>약플로 · Yakflo</div>
+        <div style={{ fontSize: 12, color: t.textL, marginTop: 4 }}>약품 통합 관리 솔루션</div>
       </div>
       {msg && <div style={{ background: msg.startsWith('✅') ? t.greenL : t.redL, borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: msg.startsWith('✅') ? t.green : t.red, fontSize: 13, fontWeight: 500 }}>{msg}</div>}
       <div style={{ marginBottom: 14 }}><label style={{ fontSize: 11, color: t.textM, display: 'block', marginBottom: 4, fontWeight: 500 }}>이메일</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" style={ip} onKeyDown={e => e.key === 'Enter' && (mode === 'login' ? handleLogin() : mode === 'signup' ? handleSignup() : handleReset())} /></div>
@@ -2084,7 +2087,7 @@ export default function App() {
   if (loading) return (
     <ThemeCtx.Provider value={themeVal}>
       <div style={{ minHeight: '100vh', background: t.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <div style={{ fontSize: 15, color: t.accent, fontWeight: 500 }}>씨엔씨재활의학과 약품관리</div>
+        <div style={{ fontSize: 15, color: t.accent, fontWeight: 500 }}>약플로 · Yakflo</div>
         <div style={{ fontSize: 13, color: t.textL }}>데이터 불러오는 중...</div>
         <div style={{ width: 200, height: 3, background: t.border, borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ height: '100%', background: t.accent, borderRadius: 2, animation: 'ld 1.5s ease-in-out infinite', width: '60%' }} />
@@ -2101,6 +2104,14 @@ export default function App() {
         * { font-family: 'Roboto', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
         body { margin: 0; -webkit-tap-highlight-color: transparent; }
         input, select, textarea, button { font-family: inherit; }
+        /* ═══ 브랜드 영역 (로고 + 타이틀 + 부제) — 글씨 깨짐 방지 ═══ */
+        .brand-area { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .brand-logo { flex-shrink: 0; }
+        .brand-title { font-weight: 700; white-space: nowrap; color: #804A87; }
+        .brand-sub   { font-size: 12px; color: #5b6776; }
+        @media (max-width: 640px) {
+          .brand-sub { display: none; }
+        }
         @media print {
           @page { size: landscape; margin: 8mm; }
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
