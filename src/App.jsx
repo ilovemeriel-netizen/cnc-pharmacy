@@ -2167,7 +2167,7 @@ function LoginPage({ onLogin }) {
     setLoading(true); setMsg(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin, scopes: 'profile_nickname account_email' },
     })
     if (error) { setLoading(false); setMsg('카카오 로그인 실패: ' + error.message) }
     /* 성공 시 카카오 페이지로 자동 리다이렉트됨 */
